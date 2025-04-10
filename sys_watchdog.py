@@ -17,17 +17,14 @@ print("Filters:\n\n🟦 FW = From Windows\n🟨 NFW = Not From Windows\n🚨 Sus
 print("Press any key to start.\n\n")
 os.system("pause > nul")
 
-# Fichier de log
 LOG_FILE = "logs.txt"
 
-# Dictionnaires pour suivre ce qu'on a déjà vu
 seen_files_by_name = {}
 seen_conns_by_name = {}
 
-# Liste des IPs suspectes à surveiller
-SUSPECT_IPS = ['192.168.1.100', '10.0.0.2']  # À compléter avec des IPs à surveiller
 
-# Dossier Windows
+SUSPECT_IPS = ['192.168.1.100', '10.0.0.2'] 
+
 WINDOWS_SYSTEM_PATHS = ['C:\\Windows', 'C:\\Program Files', 'C:\\Users']
 
 def is_windows_process(path):
@@ -49,7 +46,7 @@ def is_suspect_file(path):
     path = path.lower()
     for wp in WINDOWS_SYSTEM_PATHS:
         if wp.lower() in path:
-            return False  # C'est un fichier Windows, ne pas le marquer comme suspect.
+            return False  
     return True
 
 def get_process_info(proc):
@@ -79,13 +76,13 @@ def monitor_processes():
                 if name is None:
                     continue
 
-                # Initialiser les ensembles si pas encore vus
+
                 if name not in seen_files_by_name:
                     seen_files_by_name[name] = set()
                 if name not in seen_conns_by_name:
                     seen_conns_by_name[name] = set()
 
-                # 🔹 Fichiers ouverts
+
                 try:
                     for f in proc.open_files():
                         if f.path not in seen_files_by_name[name]:
@@ -100,7 +97,7 @@ def monitor_processes():
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
 
-                # 🔹 Connexions réseau
+
                 try:
                     for conn in proc.connections(kind='inet'):
                         if conn.status != psutil.CONN_NONE and conn.raddr:
