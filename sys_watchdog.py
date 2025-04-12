@@ -2,28 +2,51 @@ import psutil
 import time
 from datetime import datetime
 import os
+import json
+from colorama import Fore, Style, init
 
-os.system("title System Watchdog")
-print('''
+# Initialisation de colorama pour la coloration dans le terminal
+init(autoreset=True)
 
+# Chargement de la configuration depuis config.json
+def load_config():
+    try:
+        with open("config.json", "r") as f:
+            config = json.load(f)
+            return config.get("log", False)
+    except FileNotFoundError:
+        print(f"{Fore.RED}Error: config.json not found. Using default settings.")
+        return False
+    except json.JSONDecodeError:
+        print(f"{Fore.RED}Error: Invalid JSON format in config.json. Using default settings.")
+        return False
+
+LOG_FILE = "logs.txt"
+LOGGING_ENABLED = load_config()
+
+os.system("title System Watchdog (idle)")
+print(f'''{Fore.LIGHTBLUE_EX}
   ___         _              __      __    _      _       _           
  / __|_  _ __| |_ ___ _ __   \ \    / /_ _| |_ __| |_  __| |___  __ _ 
  \__ \ || (_-<  _/ -_) '  \   \ \/\/ / _` |  _/ _| ' \/ _` / _ \/ _` |
  |___/\_, /__/\__\___|_|_|_|   \_/\_/\__,_|\__\__|_||_\__,_\___/\__, |
       |__/                                                      |___/ 
 
+======================================================================
+
+{Fore.WHITE}// DEVELOPED BY {Fore.LIGHTYELLOW_EX}NOTLOANN
+{Fore.WHITE}// CURRENT VERSION: {Fore.LIGHTYELLOW_EX}2.0
+
+{Fore.WHITE}// LOGS: {Fore.LIGHTYELLOW_EX}{'TRUE' if LOGGING_ENABLED else 'FALSE'}
 ''')
-print("Filters:\n\n🟦 FW = From Windows\n🟨 NFW = Not From Windows\n🚨 Suspicious file interaction/connections will be listed in logs.txt\n\nThis script is most likely used to detect rats.")
-print("Press any key to start.\n\n")
+
+print(f"{Style.DIM}Press any key to start.\nPress CTRL+C to stop.\n\n")
 os.system("pause > nul")
 
-LOG_FILE = "logs.txt"
+os.system("title System Watchdog (active)")
 
 seen_files_by_name = {}
 seen_conns_by_name = {}
-
-
-SUSPECT_IPS = ['192.168.1.100', '10.0.0.2'] 
 
 WINDOWS_SYSTEM_PATHS = ['C:\\Windows', 'C:\\Program Files', 'C:\\Users']
 
@@ -33,85 +56,63 @@ def is_windows_process(path):
     path = path.lower()
     return path.startswith("c:\\windows")
 
-def is_suspect_ip(ip):
-    """
-    Vérifie si l'IP appartient à une liste d'IP suspectes.
-    """
-    return ip in SUSPECT_IPS
-
-def is_suspect_file(path):
-    """
-    Vérifie si le fichier est dans un répertoire sensible non-Windows.
-    """
-    path = path.lower()
-    for wp in WINDOWS_SYSTEM_PATHS:
-        if wp.lower() in path:
-            return False  
-    return True
-
 def get_process_info(proc):
     try:
         name = proc.name()
         pid = proc.pid
         exe = proc.exe()
-        system_flag = "🟦 FW" if is_windows_process(exe) else "🟨 NFW"
-        return name, pid, exe, system_flag
+        return name, pid, exe
     except (psutil.NoSuchProcess, psutil.AccessDenied):
-        return None, None, None, None
+        return None, None, None
 
 def log_to_file(message):
     """
     Enregistre les messages dans un fichier de log avec l'encodage UTF-8.
     """
-    with open(LOG_FILE, "a", encoding="utf-8") as log_file:
-        log_file.write(f"{message}\n")
+    if LOGGING_ENABLED:
+        with open(LOG_FILE, "a", encoding="utf-8") as log_file:
+            log_file.write(f"{message}\n")
 
 def monitor_processes():
-    print("🔍 Checking...\n")
+    print(f"{Fore.GREEN}🔍 Checking...\n")
 
     while True:
         for proc in psutil.process_iter(['pid']):
             try:
-                name, pid, exe, system_flag = get_process_info(proc)
+                name, pid, exe = get_process_info(proc)
                 if name is None:
                     continue
 
+                # Récupérer la date en gris/blanc
+                date_str = f"{Fore.WHITE}[{datetime.now().strftime('%H:%M:%S')}]"
 
-                if name not in seen_files_by_name:
-                    seen_files_by_name[name] = set()
-                if name not in seen_conns_by_name:
-                    seen_conns_by_name[name] = set()
-
-
+                # Vérification des accès aux fichiers
                 try:
                     for f in proc.open_files():
-                        if f.path not in seen_files_by_name[name]:
-                            seen_files_by_name[name].add(f.path)
-                            if is_suspect_file(f.path):
-                                message = f"[{datetime.now().strftime('%H:%M:%S')}] 🚨 Suspect file access: {f.path} by {name} [{system_flag}]"
-                                print(message)
-                                log_to_file(message)
-                            else:
-                                message = f"[{datetime.now().strftime('%H:%M:%S')}] 📁 {name} has opened {f.path} [{system_flag}]"
-                                print(message)
+                        message = f"{date_str} {Fore.YELLOW}📁 {name} has opened {f.path}"
+                        print(message)
+                        log_to_file(message)  # Log le message si l'option est activée
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
 
-
+                # Vérification des connexions réseau
                 try:
                     for conn in proc.connections(kind='inet'):
                         if conn.status != psutil.CONN_NONE and conn.raddr:
                             ip, port = conn.raddr
-                            conn_key = f"{ip}:{port}"
-                            if conn_key not in seen_conns_by_name[name]:
-                                seen_conns_by_name[name].add(conn_key)
-                                if is_suspect_ip(ip):
-                                    message = f"[{datetime.now().strftime('%H:%M:%S')}] 🚨 Suspect connection: {name} connected to suspicious IP {ip}:{port} [{system_flag}]"
-                                    print(message)
-                                    log_to_file(message)
-                                else:
-                                    message = f"[{datetime.now().strftime('%H:%M:%S')}] 🌐 {name} connected to {ip}:{port} [{system_flag}]"
-                                    print(message)
+                            message = f"{date_str} {Fore.CYAN}🌐 {name} connected to {ip}:{port}"
+                            print(message)
+                            log_to_file(message)  # Log le message si l'option est activée
+                except (psutil.AccessDenied, psutil.NoSuchProcess):
+                    pass
+
+                # Vérification des accès aux périphériques (caméra, microphone)
+                try:
+                    for f in proc.open_files():
+                        if 'camera' in f.path.lower() or 'mic' in f.path.lower():
+                            message = f"{date_str} {Fore.RED}🎥 {name} has accessed a camera or mic: {f.path}"
+                            print(message)
+                            log_to_file(message)  # Log le message si l'option est activée
                 except (psutil.AccessDenied, psutil.NoSuchProcess):
                     pass
 
@@ -124,4 +125,14 @@ if __name__ == "__main__":
     try:
         monitor_processes()
     except KeyboardInterrupt:
-        print("\n🛑 Stopped check.")
+        os.system("title System Watchdog (stopped)")
+        print(f"\n\n{Fore.LIGHTRED_EX}🛑 Stopped check.{Style.RESET_ALL}")
+        print(f"\nCommands: {Style.DIM}restart/exit")
+        choice = input(f"{Fore.LIGHTYELLOW_EX}==> ")
+        if choice == "restart":
+            os.system("cls")
+            os.system("python main.py")
+        if choice == "exit":
+            print(f"\n{Fore.LIGHTCYAN_EX}See ya!")
+            time.sleep(1)
+            exit()
