@@ -1,0 +1,10 @@
+
+
+{
+    "_": "Using logs is not recommended!",
+    "__": "If the process runs for a long time it can take up all your storage.",
+
+
+
+    "log": false
+}
